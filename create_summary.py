@@ -207,6 +207,21 @@ def getStudyScoreData(syn, studyScoreFiles):
             .rename(columns={'recordid':'recordId'})
             )
 
+def extractClientInfo(labels):
+    """Extracts information in clientInfo column by fixing different formats of the data and returning a dataframe
+
+    values are either strings representing json, NaN or a string of format
+    'ClientInfo [appName=Mobile Toolbox, appVersion=14, ... sdkVersion=1]'
+    """
+    def loadjson(item):
+        if pd.isnull(item): return item
+        try:
+            return json.loads(item)
+        except json.JSONDecodeError: #If data is not json but starts with "ClientInfo [..."
+            return json.loads(item.replace('ClientInfo [', '{"').replace(']', '"}').replace('=', '":"').replace(', ', '", "'))
+
+    return pd.json_normalize(labels.apply(loadjson)).drop('type', axis=1) 
+
 def visualizeAdherence(allData, studies):
     import seaborn as sns
     import upsetplot
@@ -214,40 +229,67 @@ def visualizeAdherence(allData, studies):
 
     #Remove fnamea as it isn't scored
     allData = allData.query("assessmentId!='fnamea'")
+    # If adherence record is missing set startedOn to uploadedOn
+    allData = allData.assign(startedOn = np.where(allData.startedOn.isnull(), allData.uploadedOn, allData.startedOn))
+    allData = allData.set_index('startedOn')
     #Generate heatmap
     df = allData[['wasCompleted', 'inSynapseParent', 'inStudyProject', 'inParquet', 'inScores']]
-    sns.heatmap(df, cbar=False)
+    ax = sns.heatmap(df, cbar=False)
+    ticklabels = ['NaT' if pd.isnull(df.index[int(tick)]) else df.index[int(tick)].strftime('%Y-%m-%d') for tick in ax.get_yticks()]
+    ax.set_yticklabels(ticklabels);
 
     #Generate Upset Plot
     df_up = df.astype('bool').groupby(list(df.columns)).size()
     upsetplot.plot(df_up, orientation='horizontal')
 
-    
     #Per study heatmaps
     for i, df in allData.groupby('studyId'):
         df1 = df[['wasCompleted', 'inSynapseParent', 'inStudyProject', 'inParquet', 'inScores']]
-        df1 = df1.fillna(0)
         plt.figure()
-        sns.heatmap(df1.astype('int'), cbar=False)
+        ax = sns.heatmap(df1, cbar=False)
+        ticklabels = ['NaT' if pd.isnull(df1.index[int(tick)]) else df1.index[int(tick)].strftime('%Y-%m-%d') for tick in ax.get_yticks()]
+        ax.set_yticklabels(ticklabels);
         label = (studies.query("studyId=='%s'"%i)['name']+'('+
                  studies.query("studyId=='%s'"%i)['id'] + ')').iloc[0]
         plt.title(label)
         print(label)
 
 
-    #generate Sankey plot
+    #Plot percent completed across different parameters
+    df = allData
+    ax = plt.subplot(2,2,1)
+    (df.query('wasCompleted==1').groupby(pd.Grouper(freq='W'))[['inSynapseParent', 'inStudyProject',
+                                                                'inParquet', 'inScores']].mean()*100).plot(ax=ax)
+    plt.ylabel('completed [%]')
+    for i, label in enumerate(['assessmentId','studyId','osName']):
+        ax = plt.subplot(2,2,i+2)
+        (df.query('wasCompleted==1').groupby(label)[['inSynapseParent', 'inStudyProject',
+                                                     'inParquet', 'inScores']].mean()*100).plot(ax=ax, legend=False)
+        plt.ylabel('Available [%]')
+        plt.ylim(0,100)
+
+    #Plot time changes
+    allData['completion time [s]'] = (allData.finishedOn-allData.index).map(lambda x:x.seconds)
+    allData['export delay [s]'] = (allData.exportedOn-allData.finishedOn).map(lambda x:x.seconds)
+    allData['upload delay [s]'] = (allData.uploadedOn-allData.finishedOn).map(lambda x:x.seconds)
+    allData['in Synapse delay [s]'] = (allData.createdOn-allData.finishedOn).map(lambda x:x.seconds)
+
+    plt.figure()
+    ax = plt.subplot(2,1,1)
+    for dts in ['completion time [s]', 'export delay [s]', 'upload delay [s]', 'in Synapse delay [s]']:
+        sns.distplot(allData[dts], label=dts + ' median=%0.0fs'% allData[dts].median(), hist=False, ax=ax)
+    plt.legend()
+    ax = plt.subplot(2,1,2)
+    df.groupby(pd.Grouper(freq='W'))[ ['completion time [s]', 'export delay [s]', 'upload delay [s]', 'in Synapse delay [s]']].median().plot(logy=True, ax=ax)
+    plt.ylabel('Delay [s]')
+
     
-
-
 if __name__ == "__main__":
     #Get information about studies in Synapse
     studies = getStudies(syn)
     studies = studies.merge(pd.DataFrame([studyEntityIds(syn, id) for id in studies.id]), left_on='id', right_on='projectId')
-
-    #TODO remove filter to run on all data
-    studies = studies.iloc[[3,4],:]
-    #TODO ignore construct validation
- 
+    #Remove construct validation 
+    #studies = studies.query("studyId=='hktrrx'")
     
     #Get adherence Records from Bridge
     adherence = getBridgeAdherenceData(bridge, studyNames = set(studies['studyId']))
@@ -265,12 +307,10 @@ if __name__ == "__main__":
     allData = studySynapseData.merge(allData, on='recordId', how='outer')
     print('Number of records in studyProjects', len(studySynapseData))
 
-
     #Merge in information from ParquetData
     parquetData = getStudyParquetData(syn, studies['parquetFolderId'])
     allData = parquetData.merge(allData, on='recordId', how='outer')
     print('Number of records in parquetData', len(parquetData))
-
     
     #Merge in information from Score Files
     scoreData = getStudyScoreData(syn, studies['scoreFileId'])
@@ -285,6 +325,8 @@ if __name__ == "__main__":
                .drop(['clientTimeZone_x', 'clientTimeZone_y'], axis=1)
                .assign(studyId=np.where(allData.studyIds.isnull(), allData.studyId, allData.studyIds))
                .drop('studyIds', axis=1)
+               .merge(extractClientInfo(allData.clientInfo), left_index=True, right_index=True) #Fix clientInfo
+               .drop('clientInfo', axis=1)
                .sort_values(['studyId', 'startedOn'], ascending=True)
                .reset_index(drop=True)
           )
@@ -292,22 +334,23 @@ if __name__ == "__main__":
     allData = allData[FIRST_COLUMNS + sorted(set(allData.columns)-set(FIRST_COLUMNS))]
 
     #Fill in 0 for all places we don't have data
-    boolCols = ['inScores', 'inParquet', 'inStudyProject', 'inSynapseParent', 'wasCompleted']
+    #We don't do this for wasCompleted as we aren't sure if it was completed if adherence is missing
+    boolCols = ['inScores', 'inParquet', 'inStudyProject', 'inSynapseParent']
     allData[boolCols] = allData[boolCols].fillna(value=0)
     #Change timestamps to time dates
     timestampCols = ['modifiedOn', 'createdOn', 'exportedOn', 'eventTimestamp_y']
-    allData[timestampCols] = allData[timestampCols].astype('datetime64[ms]')
+    allData[timestampCols] = (1000000*allData[timestampCols]).astype('datetime64[ns, UTC]')
     #Change time strings to timedates
     timeStringCols =  ['uploadedOn', 'finishedOn', 'startedOn', 'eventTimestamp_x']
     allData[timeStringCols] = allData[timeStringCols].apply(pd.to_datetime)
+    
+    #Store data to Synapse
+    allData.to_csv('completion_records.csv')
+    syn.store(synapseclient.File('completion_records.csv', parent='syn26253351'),
+              used=usedEntities, executed = thisCodeInSynapse('syn1774100'))
 
-    
-    
-
-    
-#    #Store data to Synapse
-#    allData.to_csv('completion_records.csv')
-#    syn.store(synapseclient.File('completion_records.csv', parent='syn26253351'),
-#              used=usedEntities, executed = thisCodeInSynapse('syn1774100'))
-#
     visualizeAdherence(allData.query("assessmentId!='fnamea'"), studies)
+
+    #Example get session level summary from one study
+    # allData.query("studyId=='hktrrx'").groupby(['externalId', 'sessionGuid'])[['inStudyProject', 'inParquet', 'inScores']].
+    #                                    sum().reset_index().pivot(index='externalId', columns='sessionGuid')
