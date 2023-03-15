@@ -345,7 +345,7 @@ if __name__ == "__main__":
     allData[timeStringCols] = allData[timeStringCols].apply(pd.to_datetime)
     
     #Store data to Synapse
-    allData.to_csv('completion_records.csv')
+    allData.to_csv('completion_records.csv', index=False)
     syn.store(synapseclient.File('completion_records.csv', parent='syn26253351'),
               used=usedEntities, executed = thisCodeInSynapse('syn1774100'))
 
