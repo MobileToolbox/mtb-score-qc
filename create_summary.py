@@ -351,6 +351,3 @@ if __name__ == "__main__":
 
     visualizeAdherence(allData.query("assessmentId!='fnamea'"), studies)
 
-    #Example get session level summary from one study
-    # allData.query("studyId=='hktrrx'").groupby(['externalId', 'sessionGuid'])[['inStudyProject', 'inParquet', 'inScores']].
-    #                                    sum().reset_index().pivot(index='externalId', columns='sessionGuid')
