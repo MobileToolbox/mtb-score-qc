@@ -350,5 +350,5 @@ if __name__ == "__main__":
     syn.store(synapseclient.File('completion_records.csv', parent='syn26253351'),
               used=usedEntities, executed = thisCodeInSynapse('syn1774100'))
 
-    visualizeAdherence(allData.query("assessmentId!='fnamea'"), studies)
+
 
