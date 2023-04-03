@@ -9,6 +9,7 @@ from pyarrow import fs
 import pyarrow.parquet as pq
 import bridgeclient
 from synapseHelpers import thisCodeInSynapse
+from tqdm import tqdm
 
 PARENT_BRIDGE_PROJECT = 'syn26253351'
 PARENT_BRIDGE_FILE_VIEW = 'syn27651981'
@@ -86,7 +87,7 @@ def getBridgeAdherenceData(bridge, studyNames):
     print(len(participants), 'Participants in studies')
 
     #Get adherence records for each individual then merge together with relevant participant fields
-    dfs = [bridge.getAdherence(userId=row['id'], studyId=row['studyIds'][0]) for i, row in participants.iterrows()]
+    dfs = [bridge.getAdherence(userId=row['id'], studyId=row['studyIds'][0]) for i, row in tqdm(participants.iterrows(), desc='Adherence', total=len(participants))]
     adherence = (pd.concat(dfs)
                  .drop('type', axis=1)
                  .merge(participants[['id', 'studyIds', 'externalId']], left_on='userId', right_on='id')
