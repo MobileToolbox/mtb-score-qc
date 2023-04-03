@@ -1,9 +1,7 @@
-import requests
 import json
 import pandas as pd
 import numpy as np
 from pandas import json_normalize
-import math
 import synapseclient 
 from pyarrow import fs
 import pyarrow.parquet as pq
