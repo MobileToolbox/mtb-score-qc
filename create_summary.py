@@ -90,6 +90,7 @@ def getBridgeAdherenceData(bridge, studyNames):
                  .drop('type', axis=1)
                  .merge(participants[['id', 'studyIds', 'externalId']], left_on='userId', right_on='id')
                  .drop('id', axis=1)
+                 .drop('uploadedOn', axis=1)   #Creates conflict with Synapse records - should update.
                  )
     adherence['studyIds'] = adherence.studyIds.map(lambda x: x[0]) #Assumes that participants are in only 1 study
     adherence.insert(0, "wasCompleted", (~adherence['finishedOn'].isnull() & ~adherence['declined']).astype('int'))
