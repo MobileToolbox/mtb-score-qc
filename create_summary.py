@@ -16,6 +16,9 @@ QUERY = 'select * from %s'
 FIRST_COLUMNS = ['recordId', 'wasCompleted', 'inSynapseParent', 'inStudyProject', 'inParquet', 'inScores', 'assessmentId',
                  'startedOn', 'externalId', 'healthCode', 'studyId', 'studyMemberships', 'instanceGuid']
 
+NON_SHARING_USERS_IDS = ['-q-or4T2YwHzSRCn5vYThB9p', '0Yh0AIZMDr9YfZ2Pn_YG_Jo9', '1lYj8QEd26aOe4bbmJyspc-5', '1TxW4vsFCug37so9E8c217WQ', '2-Ht4PbtHtYVyiTyX7N1_bIq', '39iYuL3pEBamI49yuubwgyjW', '4cPy-ypC93OA_aDTFpqBmABx', '5y6kzVUAVvM7jiRuv-58Sv-E', '7B3Mz5LdK3hz0OHtgb_-P7HE', '8KLadsK3gXyIG7ZZ8ZmHFH2D', 'ADz4u-ypRetc7X-zcocAYzzY', 'AVxq2Z8df9xLepePhW4SVkLK', 'B23vuLk4-KZ3EaK6fno9450n', 'BgvtLFxsjKRUphhylQHn2uTr', 'C47o8CXOfa74Xn8W5N7nKyQF', 'c6BAonK0iKhZvtqp9qUG1oh0', 'cGIwz1KztqTVjZ6QWh3UvviG', 'dHkAtQZK4y3U1wHbDlIgJhvN', 'dJJ6MxpqvTKF3UOrk8XKVyfq', 'DsYVJFAvtDKJ3WQSZWqo24YK', 'e4gk_Ow1CpctYq_LuWfkdSpe', 'etHDqtrXmGYCCABvSHrExVsx', 'fdgYSze7Lc5O6hrh6Uy15LrU', 'G0HyAJ15bGh4RCSrdCOqPRkl', 'GFPbssrvkLwbOaRc7gIS8Raz', 'gmHi393OgJnr-hFIPaw5TJ8i', 'GvUa1hx8ytCrUhk9vMER6Ebf', 'H59exPp9UeP37zOW9IwDITZU', 'Hdw8YFfH5shzK02IbMfDpZK3', 'HhAmaucZUi4p5rUk4H8bIgE1', 'Hkza6GwTwzThGa1NgH1StUP_', 'iLcZc_MXhRrpMiQcU23hJhcd', 'im7cVmap78Ln6uxdWvceozUI', 'jfG-mkffVUDUM-Wgus1foQpM', 'jfyk6kN1gePe7-It99ZfYP2m', 'jhjDnaSw0dFIbmyzYgDe3WFI', 'kQklmnpU17rWl3N00-4gTZob', 'l4dN9EU1dP84d2DSUpFsQfH8', 'llqNTUC-epiDWTVD9McCZ-OA', 'mLr_YfOj0VASVcjXhByUfbrh', 'mn_SenJdAOS5BtGwU6cS3xc0', 'mOv2xsCtrdx3yWkcvTcbULE-', 'N_2xdt59GkNopkPxVq83CYDM', 'N8P4YILDLoxGxYvH4YfGcQUU', 'njrDDA1uz0YS8WUan-f50Qlj', 'NLPrUw0ZJs5-8Uj9T-ox1i3u', 'nLwLkDma9f0bg1yPokdnkEOp', 'NmSkRApWsempUhvDLvW9p8wQ', 'qO9nWQIDKWn7xKgs4eBjavEX', 'qthcQKvlZZ6WvAlK2-zIOwXF', 'qZ0Zqg1hg0eTdn8I8olNrf4d', 'SnmHtI1HM9uWV5m884Bfkelr', 'SZFZWukTmr3Iy7WA2cIuD0a0', 'T_7dq2Y45ndiJ2gIW60RpRV4', 't1N-PXrtzutnPCY7e-Ho4luL', 'TaAEig2YWmdTYz18eqZEzBr9', 'tdvMyRPgSTgp8C2VlLRj7HbR', 'UhzANzIB5MB3X-pIM3jrQIKa', 'UZypiU9AG_o9fIrZSKt0H0Sa', 'v9rvtx53k70GpEGT6r6NaKxa', 'w_7f4mxd1dEo9JrFg5bW_xm_', 'Wad6wpx_1CSitQWJFPz8q80d', 'WPIJQeRvLFB87Zh-h1w_Veae', 'wrzL5aXoiouavpIAtjy0_xO9', 'wswVHIenzD5ql_3fF-lFpShr', 'YjTO073poMWKsM_uX-OIvVof', 'YW35kYSYnxBxUK-REWxpgGyF', 'zkqlhGLudu07lfGAFsqUBOzJ']
+NON_SHARING_LAST_CREATEDON = '2023-04-27T13:41:31.586Z'
+
 
 syn = synapseclient.login()
 bridge = bridgeclient.bridgeConnector(email=None, password=None, study='mobile-toolbox')
@@ -82,8 +85,24 @@ def getBridgeAdherenceData(bridge, studyNames):
     # Filter out participants in studies being observed
     idx = [(a[0] if a else None) in studyNames for a in participants['studyIds']]
     participants = participants.loc[idx]
-    print(len(participants), 'Participants in studies')
-
+    print(len(participants), 'participants in studies')
+    
+    # Fetch participant details for new users to determine sharing scope
+    newParticipants = participants[pd.to_datetime(participants.createdOn)>pd.to_datetime(NON_SHARING_LAST_CREATEDON)]
+    if len(newParticipants)==0:
+        ids = set(NON_SHARING_USERS_IDS)
+    else:
+        meta = [bridge.getParticipantMetaData(row['id'])
+            for i, row in tqdm(newParticipants.iterrows(), desc='Sharing Scope', total=len(newParticipants))]
+        new_ids = [row['id'] for row in meta if row['sharingScope']=='no_sharing']
+        ids = set(NON_SHARING_USERS_IDS).union(set(new_ids))
+        print('New non sharing users found:')
+        print(new_ids)
+        print('Last created User', participants.createdOn.max())
+    
+    #Filter out participants who have no_sharing set for sharing scope.
+    participants = participants[~participants['id'].isin(ids)]
+    print(len(participants), 'participants with sharing')
     #Get adherence records for each individual then merge together with relevant participant fields
     dfs = [bridge.getAdherence(userId=row['id'], studyId=row['studyIds'][0]) for i, row in tqdm(participants.iterrows(), desc='Adherence', total=len(participants))]
     adherence = (pd.concat(dfs)
