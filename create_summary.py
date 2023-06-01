@@ -60,7 +60,7 @@ def studyEntityIds(syn, studyId):
         entDict['parquetFolderId'] = None
 
     #Score File is in subfolder. Get the folder and get add file in folder
-    scoreFolderId = [ent['id'] for ent in entities if ent['name']=='score' and
+    scoreFolderId = [ent['id'] for ent in entities if ent['name']=='scores' and
                      ent['type']=='org.sagebionetworks.repo.model.Folder'][0]
     try:
         entDict['scoreFileId'] = list(syn.getChildren(scoreFolderId))[0]['id']
@@ -185,13 +185,16 @@ def getStudyParquetData(syn, studyParquetFolders):
         token = syn.get_sts_storage_token(folder_id, permission="read_only") # , output_format='bash'
         s3 = fs.S3FileSystem(access_key=token['accessKeyId'], secret_key = token['secretAccessKey'], session_token = token['sessionToken'])
 
-        #Fetch the recordIds fromt the taskData
+        #Fetch the recordIds fromt the metadata
         try:
-            dataset = pq.ParquetDataset(token['bucket']+'/'+token['baseKey']+'/'+'dataset_sharedschema_v1/', filesystem=s3) 
+            dataset = pq.ParquetDataset(token['bucket']+'/'+token['baseKey']+'/'+'dataset_archivemetadata_v1/', filesystem=s3) 
+            dfs.append(dataset.read().to_pandas()[['recordid']])
         except FileNotFoundError: #This indicates that it is an older project with different schema (e.g. construct validation)
-            dataset = pq.ParquetDataset(token['bucket']+'/'+token['baseKey']+'/'+'dataset_taskresult/', filesystem=s3)
-        df = dataset.read().to_pandas()
-        dfs.append(df[['recordid']])
+            try:
+                dataset = pq.ParquetDataset(token['bucket']+'/'+token['baseKey']+'/'+'dataset_metadata/', filesystem=s3)
+                dfs.append(dataset.read().to_pandas()[['recordid']])
+            except  FileNotFoundError: #The metadata is missing and how to use it is unkown.
+                pass
         usedEntities.append(folder_id)
 
     return (pd.concat(dfs)
@@ -308,8 +311,8 @@ if __name__ == "__main__":
     studies = getStudies(syn)
     studies = studies.merge(pd.DataFrame([studyEntityIds(syn, id) for id in studies.id]), left_on='id', right_on='projectId')
     #Remove construct validation 
-    #studies = studies.query("studyId=='hktrrx'")
-    
+    # studies = studies.query("studyId!='cxhnxd'").query("studyId!='vwrdjf'").query("studyId!='mtbwrj'").query("studyId!='pgdvpj'").query("studyId!='gxvwhj'")
+        
     #Get adherence Records from Bridge
     adherence = getBridgeAdherenceData(bridge, studyNames = set(studies['studyId']))
     print('Number of adherenceRecords', len(adherence))
