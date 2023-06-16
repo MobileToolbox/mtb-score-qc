@@ -70,6 +70,17 @@ def studyEntityIds(syn, studyId):
     return entDict
 
 
+def thisCodeInSynapse(parentId, file=None, description=''):
+    """Determines the name of the file that the code is called from
+    and uploads that to Synapse returning the synapseId of created codeObject.
+    """
+    file = inspect.getfile(sys._getframe(1)) if file==None else file
+    #Make sure unallowed characters are striped out for the name
+    code= synapseclient.File(file, name=os.path.split(file)[-1], parent=parentId, description=description)
+    codeEntity = syn.store(code)
+    return codeEntity
+
+
 def getBridgeAdherenceData(bridge, studyNames):
     """Find all adherence records in Bridge in the studyNames.
 
