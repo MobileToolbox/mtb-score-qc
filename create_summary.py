@@ -253,7 +253,7 @@ def extractClientInfo(labels):
         except json.JSONDecodeError: #If data is not json but starts with "ClientInfo [..."
             return json.loads(item.replace('ClientInfo [', '{"').replace(']', '"}').replace('=', '":"').replace(', ', '", "'))
 
-    return pd.json_normalize(labels.apply(loadjson)).drop('type', axis=1) 
+    return pd.json_normalize(labels.apply(loadjson)).drop('type', axis=1, errors='ignore')
 
 def visualizeAdherence(allData, studies):
     import seaborn as sns
