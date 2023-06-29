@@ -11,3 +11,4 @@ jupyter_core
 jupyterlab-widgets==3.0.5
 git+https://github.com/larssono/bridgeclient.git
 tqdm==4.64.1
+upsetplot
