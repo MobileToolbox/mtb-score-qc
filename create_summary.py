@@ -28,13 +28,15 @@ usedEntities = list()
 def getStudies(syn, trackingTable='syn50615998'):
     return syn.tableQuery(QUERY %trackingTable).asDataFrame()
 
-def studyEntityIds(syn, studyId):
+def studyEntityIds(syn, studyId, bridgeStudyId):
     """Returns synapse entity ids of key components of the study.
     This is inferred from both the templetized structure of projects and the names of entities.
 
     :param syn:          A synapse object: syn = synapseclient.login()- Must be logged into synapse
 
     :param studyId:      The synapse Id of the project belonging to a study
+
+    :param bridgeStudyId: The Bridge study ID
 
     :returns:           A dictionary with keys: projectId, bridgeFileViewId, participantVersionsId, parquetFolderId, scoreFileId
     """
@@ -63,7 +65,9 @@ def studyEntityIds(syn, studyId):
     scoreFolderId = [ent['id'] for ent in entities if ent['name']=='scores' and
                      ent['type']=='org.sagebionetworks.repo.model.Folder'][0]
     try:
-        entDict['scoreFileId'] = list(syn.getChildren(scoreFolderId))[0]['id']
+        children = list(syn.getChildren(scoreFolderId))
+        entDict['scoreFileId'] = [ent['id'] for ent in children if bridgeStudyId in ent['name']][0]
+        # entDict['scoreFileId'] = list(syn.getChildren(scoreFolderId))[0]['id']
     except IndexError:
         entDict['scoreFileId'] = None
         
@@ -329,7 +333,7 @@ if __name__ == "__main__":
 
     #Get information about studies in Synapse
     studies = getStudies(syn)
-    studies = studies.merge(pd.DataFrame([studyEntityIds(syn, id) for id in studies.id]), left_on='id', right_on='projectId')
+    studies = studies.merge(pd.DataFrame([studyEntityIds(syn, id, studies["studyId"][0]) for id in studies.id]), left_on='id', right_on='projectId')
     #Remove construct validation 
     # studies = studies.query("studyId!='cxhnxd'").query("studyId!='vwrdjf'").query("studyId!='mtbwrj'").query("studyId!='pgdvpj'").query("studyId!='gxvwhj'")
         
